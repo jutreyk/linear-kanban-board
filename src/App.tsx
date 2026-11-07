@@ -96,14 +96,35 @@ const INITIAL_TASKS: Task[] = [
   }
 ];
 
+const STORAGE_KEY = 'linear_kanban_tasks_v1';
+
+const loadStoredTasks = (): Task[] => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return INITIAL_TASKS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_TASKS;
+  } catch {
+    return INITIAL_TASKS;
+  }
+};
+
+const saveTasks = (tasks: Task[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  } catch {}
+};
+
 export const useKanbanStore = create<KanbanState>((set) => ({
-  tasks: INITIAL_TASKS,
+  tasks: loadStoredTasks(),
   searchQuery: '',
   setSearchQuery: (query) => set({ searchQuery: query }),
   moveTask: (taskId, targetColumn) =>
-    set((state) => ({
-      tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, columnId: targetColumn } : t))
-    })),
+    set((state) => {
+      const updated = state.tasks.map((t) => (t.id === taskId ? { ...t, columnId: targetColumn } : t));
+      saveTasks(updated);
+      return { tasks: updated };
+    }),
   addTask: (title, columnId, priority) =>
     set((state) => {
       const nextId = state.tasks.length + 210;
@@ -116,12 +137,16 @@ export const useKanbanStore = create<KanbanState>((set) => ({
         assignee: { name: 'Аркадий', avatar: 'АГ' },
         labels: ['Задача']
       };
-      return { tasks: [newTask, ...state.tasks] };
+      const updated = [newTask, ...state.tasks];
+      saveTasks(updated);
+      return { tasks: updated };
     }),
   deleteTask: (taskId) =>
-    set((state) => ({
-      tasks: state.tasks.filter((t) => t.id !== taskId)
-    }))
+    set((state) => {
+      const updated = state.tasks.filter((t) => t.id !== taskId);
+      saveTasks(updated);
+      return { tasks: updated };
+    })
 }));
 
 const TaskCard: React.FC<{ task: Task }> = ({ task }) => {
