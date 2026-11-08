@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X, Filter, Tag, Download, Calendar, CheckSquare, Square, Zap, TrendingUp } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X, Filter, Tag, Download, Calendar, CheckSquare, Square, Zap, TrendingUp, LayoutGrid, List, Command } from 'lucide-react';
 import { create } from 'zustand';
 
 export type Priority = 'urgent' | 'high' | 'medium' | 'low';
@@ -488,6 +488,10 @@ export const App: React.FC = () => {
   const [quickPoints, setQuickPoints] = useState<number>(3);
   const [quickDueDate, setQuickDueDate] = useState('');
 
+  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editColumn, setEditColumn] = useState<ColumnId>('todo');
@@ -626,10 +630,17 @@ export const App: React.FC = () => {
         activeElement instanceof HTMLSelectElement ||
         (activeElement as HTMLElement)?.isContentEditable;
 
-      if ((e.key === 'c' || e.key === 'C' || e.key === 'с' || e.key === 'С') && !isInputFocused && !e.metaKey && !e.ctrlKey && !e.altKey && !selectedTask) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K' || e.key === 'л' || e.key === 'Л')) {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      if ((e.key === 'c' || e.key === 'C' || e.key === 'с' || e.key === 'С') && !isInputFocused && !e.metaKey && !e.ctrlKey && !e.altKey && !selectedTask && !isCommandPaletteOpen) {
         e.preventDefault();
         setIsQuickCreateOpen(true);
       } else if (e.key === 'Escape') {
+        if (isCommandPaletteOpen) setIsCommandPaletteOpen(false);
         if (isQuickCreateOpen) setIsQuickCreateOpen(false);
         if (selectedTask) closeTaskDetail();
       }
@@ -637,7 +648,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isQuickCreateOpen, selectedTask]);
+  }, [isQuickCreateOpen, selectedTask, isCommandPaletteOpen]);
 
   const handleQuickSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -749,6 +760,41 @@ export const App: React.FC = () => {
               className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-300 hover:text-white hover:bg-linear-subtle transition"
             >
               <span>CSV</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-linear-card hover:bg-linear-subtle border border-linear-border hover:border-linear-borderHover text-xs text-slate-300 transition"
+          >
+            <Command className="w-3.5 h-3.5 text-linear-purple" />
+            <span>Команды</span>
+            <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-linear-subtle border border-linear-border text-slate-400">
+              Ctrl+K
+            </kbd>
+          </button>
+
+          <div className="flex items-center rounded-lg border border-linear-border bg-linear-card p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode('board')}
+              className={`p-1.5 rounded transition ${
+                viewMode === 'board' ? 'bg-linear-purple text-white shadow-xs' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Вид: Доска"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded transition ${
+                viewMode === 'list' ? 'bg-linear-purple text-white shadow-xs' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Вид: Список"
+            >
+              <List className="w-3.5 h-3.5" />
             </button>
           </div>
 
@@ -901,20 +947,74 @@ export const App: React.FC = () => {
       </section>
 
       <main className="flex-1 p-6 overflow-x-auto flex gap-4">
-        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          {COLUMNS.map((column) => (
-            <KanbanColumn
-              key={column.id}
-              column={column}
-              tasks={filteredTasks.filter((t) => t.columnId === column.id)}
-              isDraggingActive={Boolean(activeTask)}
-              onSelectTask={openTaskDetail}
-            />
-          ))}
-          <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
-            {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
-          </DragOverlay>
-        </DndContext>
+        {viewMode === 'board' ? (
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            {COLUMNS.map((column) => (
+              <KanbanColumn
+                key={column.id}
+                column={column}
+                tasks={filteredTasks.filter((t) => t.columnId === column.id)}
+                isDraggingActive={Boolean(activeTask)}
+                onSelectTask={openTaskDetail}
+              />
+            ))}
+            <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+              {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <div className="flex-1 max-w-5xl mx-auto rounded-xl border border-linear-border bg-linear-card/60 overflow-hidden flex flex-col">
+            <div className="grid grid-cols-12 gap-3 px-4 py-2.5 border-b border-linear-border/60 bg-linear-bg/80 text-[11px] font-mono font-medium text-linear-muted uppercase tracking-wider select-none">
+              <div className="col-span-2">Тикет</div>
+              <div className="col-span-5">Название</div>
+              <div className="col-span-2">Статус</div>
+              <div className="col-span-1 text-center">Оценка</div>
+              <div className="col-span-2 text-right">Дедлайн</div>
+            </div>
+            <div className="divide-y divide-linear-border/30 overflow-y-auto flex-1">
+              {filteredTasks.length === 0 ? (
+                <div className="p-8 text-center text-xs text-linear-muted">Задачи не найдены</div>
+              ) : (
+                filteredTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    onClick={() => openTaskDetail(task)}
+                    className="grid grid-cols-12 gap-3 px-4 py-3 items-center hover:bg-linear-subtle/40 cursor-pointer transition select-none text-xs group"
+                  >
+                    <div className="col-span-2 flex items-center gap-1.5 font-mono text-[11px] text-linear-muted">
+                      <span>{task.identifier}</span>
+                    </div>
+                    <div className="col-span-5 flex items-center gap-2 pr-2">
+                      <span className="font-medium text-white truncate">{task.title}</span>
+                    </div>
+                    <div className="col-span-2 flex items-center gap-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          task.columnId === 'done'
+                            ? 'bg-emerald-400'
+                            : task.columnId === 'in-progress'
+                            ? 'bg-linear-purple'
+                            : task.columnId === 'todo'
+                            ? 'bg-amber-400'
+                            : 'bg-slate-500'
+                        }`}
+                      />
+                      <span className="text-slate-300 capitalize text-[11px]">
+                        {COLUMNS.find((c) => c.id === task.columnId)?.title}
+                      </span>
+                    </div>
+                    <div className="col-span-1 text-center font-mono text-[11px] text-amber-300">
+                      {task.points || 1}pt
+                    </div>
+                    <div className="col-span-2 text-right font-mono text-[11px] text-slate-400">
+                      {task.dueDate ? task.dueDate.slice(5) : '—'}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
       {isQuickCreateOpen && (
@@ -1236,6 +1336,109 @@ export const App: React.FC = () => {
               >
                 Готово
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {isCommandPaletteOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-start justify-center pt-24 p-4">
+          <div className="w-full max-w-xl rounded-xl border border-linear-border bg-linear-card shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col">
+            <div className="flex items-center px-4 py-3 border-b border-linear-border bg-linear-bg/80 gap-3">
+              <Command className="w-4 h-4 text-linear-purple shrink-0" />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Введите команду или название задачи..."
+                value={commandQuery}
+                onChange={(e) => setCommandQuery(e.target.value)}
+                className="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+              />
+              <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-linear-subtle border border-linear-border text-slate-400">
+                ESC
+              </kbd>
+            </div>
+            <div className="max-h-72 overflow-y-auto p-2 space-y-1 text-xs select-none">
+              <div className="px-2 py-1 text-[10px] font-mono text-linear-muted uppercase tracking-wider">
+                Быстрые действия
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCommandPaletteOpen(false);
+                  setIsQuickCreateOpen(true);
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-linear-subtle text-slate-200 text-left transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Plus className="w-3.5 h-3.5 text-linear-purple" />
+                  <span>Создать новую задачу</span>
+                </div>
+                <kbd className="font-mono text-[10px] text-slate-500">C</kbd>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCommandPaletteOpen(false);
+                  setViewMode(viewMode === 'board' ? 'list' : 'board');
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-linear-subtle text-slate-200 text-left transition"
+              >
+                <div className="flex items-center gap-2">
+                  <LayoutGrid className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Переключить вид ({viewMode === 'board' ? 'на Список' : 'на Доску'})</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCommandPaletteOpen(false);
+                  exportToJson();
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-linear-subtle text-slate-200 text-left transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Экспортировать доску в JSON</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCommandPaletteOpen(false);
+                  setSelectedPriority('urgent');
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-linear-subtle text-slate-200 text-left transition"
+              >
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                  <span>Показать только срочные задачи</span>
+                </div>
+              </button>
+
+              {commandQuery.trim() && (
+                <>
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-mono text-linear-muted uppercase tracking-wider border-t border-linear-border/40 mt-1">
+                    Найденные задачи
+                  </div>
+                  {tasks
+                    .filter((t) => t.title.toLowerCase().includes(commandQuery.toLowerCase()) || t.identifier.toLowerCase().includes(commandQuery.toLowerCase()))
+                    .slice(0, 5)
+                    .map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setIsCommandPaletteOpen(false);
+                          openTaskDetail(t);
+                        }}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-linear-subtle text-slate-200 text-left transition"
+                      >
+                        <span className="truncate font-medium">{t.title}</span>
+                        <span className="font-mono text-[10px] text-linear-muted ml-2 shrink-0">{t.identifier}</span>
+                      </button>
+                    ))}
+                </>
+              )}
             </div>
           </div>
         </div>
