@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X, Filter, Tag } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X, Filter, Tag, Download } from 'lucide-react';
 import { create } from 'zustand';
 
 export type Priority = 'urgent' | 'high' | 'medium' | 'low';
@@ -350,6 +350,32 @@ export const App: React.FC = () => {
     return Array.from(set);
   }, [tasks]);
 
+  const exportToJson = () => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(tasks, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', dataStr);
+    dlAnchor.setAttribute('download', `kanban-export-${new Date().toISOString().slice(0, 10)}.json`);
+    dlAnchor.click();
+  };
+
+  const exportToCsv = () => {
+    const headers = ['ID', 'Identifier', 'Title', 'Column', 'Priority', 'Assignee', 'Labels'];
+    const rows = tasks.map((t) => [
+      `"${t.id}"`,
+      `"${t.identifier}"`,
+      `"${t.title.replace(/"/g, '""')}"`,
+      `"${t.columnId}"`,
+      `"${t.priority}"`,
+      `"${t.assignee.name}"`,
+      `"${t.labels.join('; ')}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent([headers.join(','), ...rows.map((r) => r.join(','))].join('\n'));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute('href', csvContent);
+    dlAnchor.setAttribute('download', `kanban-export-${new Date().toISOString().slice(0, 10)}.csv`);
+    dlAnchor.click();
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeElement = document.activeElement;
@@ -439,6 +465,25 @@ export const App: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <div className="flex items-center rounded-lg border border-linear-border bg-linear-card p-0.5">
+            <button
+              type="button"
+              onClick={exportToJson}
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-300 hover:text-white hover:bg-linear-subtle transition"
+            >
+              <Download className="w-3.5 h-3.5 text-linear-purple" />
+              <span>JSON</span>
+            </button>
+            <div className="h-3 w-px bg-linear-border" />
+            <button
+              type="button"
+              onClick={exportToCsv}
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-slate-300 hover:text-white hover:bg-linear-subtle transition"
+            >
+              <span>CSV</span>
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={() => setIsQuickCreateOpen(true)}
