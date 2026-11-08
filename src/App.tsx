@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X } from 'lucide-react';
 import { create } from 'zustand';
 
 export type Priority = 'urgent' | 'high' | 'medium' | 'low';
@@ -311,8 +311,41 @@ const KanbanColumn: React.FC<{ column: Column; tasks: Task[] }> = ({ column, tas
 };
 
 export const App: React.FC = () => {
-  const { tasks, moveTask, searchQuery, setSearchQuery } = useKanbanStore();
+  const { tasks, moveTask, searchQuery, setSearchQuery, addTask } = useKanbanStore();
   const [activeTask, setActiveTask] = React.useState<Task | null>(null);
+  const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
+  const [quickTitle, setQuickTitle] = useState('');
+  const [quickColumn, setQuickColumn] = useState<ColumnId>('todo');
+  const [quickPriority, setQuickPriority] = useState<Priority>('medium');
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      const isInputFocused =
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement ||
+        (activeElement as HTMLElement)?.isContentEditable;
+
+      if ((e.key === 'c' || e.key === 'C' || e.key === 'с' || e.key === 'С') && !isInputFocused && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setIsQuickCreateOpen(true);
+      } else if (e.key === 'Escape' && isQuickCreateOpen) {
+        setIsQuickCreateOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isQuickCreateOpen]);
+
+  const handleQuickSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickTitle.trim()) return;
+    addTask(quickTitle.trim(), quickColumn, quickPriority);
+    setQuickTitle('');
+    setIsQuickCreateOpen(false);
+  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -370,9 +403,22 @@ export const App: React.FC = () => {
             />
           </div>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-linear-purple/15 text-linear-purple border border-linear-purple/30 text-xs font-medium">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Linear Board</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsQuickCreateOpen(true)}
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-linear-card hover:bg-linear-subtle border border-linear-border hover:border-linear-borderHover text-xs text-slate-200 transition"
+          >
+            <Plus className="w-3.5 h-3.5 text-linear-purple" />
+            <span>Новая задача</span>
+            <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-linear-subtle border border-linear-border text-slate-400">
+              C
+            </kbd>
+          </button>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-linear-purple/15 text-linear-purple border border-linear-purple/30 text-xs font-medium">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Linear Board</span>
+          </div>
         </div>
       </header>
 
@@ -388,6 +434,85 @@ export const App: React.FC = () => {
           <DragOverlay>{activeTask ? <TaskCard task={activeTask} /> : null}</DragOverlay>
         </DndContext>
       </main>
+
+      {isQuickCreateOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-xl border border-linear-border bg-linear-card shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-linear-border bg-linear-bg/60">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-linear-purple" />
+                <h3 className="text-xs font-semibold text-white">Быстрое создание задачи</h3>
+                <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-linear-subtle border border-linear-border text-slate-400">
+                  шорткат C
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickCreateOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded hover:bg-linear-subtle transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickSubmit} className="p-4 space-y-4">
+              <div>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Что нужно сделать?"
+                  value={quickTitle}
+                  onChange={(e) => setQuickTitle(e.target.value)}
+                  className="w-full bg-linear-subtle border border-linear-border rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-linear-purple"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-linear-border/60">
+                <div className="flex gap-2">
+                  <select
+                    value={quickColumn}
+                    onChange={(e) => setQuickColumn(e.target.value as ColumnId)}
+                    className="bg-linear-subtle border border-linear-border text-xs text-slate-300 rounded-md px-2 py-1 focus:outline-none"
+                  >
+                    {COLUMNS.map((col) => (
+                      <option key={col.id} value={col.id}>
+                        {col.title}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={quickPriority}
+                    onChange={(e) => setQuickPriority(e.target.value as Priority)}
+                    className="bg-linear-subtle border border-linear-border text-xs text-slate-300 rounded-md px-2 py-1 focus:outline-none"
+                  >
+                    <option value="urgent">Срочно</option>
+                    <option value="high">Высокий</option>
+                    <option value="medium">Средний</option>
+                    <option value="low">Низкий</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickCreateOpen(false)}
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3.5 py-1.5 text-xs font-medium bg-linear-purple hover:bg-linear-purpleHover text-white rounded-lg shadow transition"
+                  >
+                    Создать задачу
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
