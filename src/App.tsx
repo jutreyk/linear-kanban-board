@@ -165,7 +165,7 @@ export const useKanbanStore = create<KanbanState>((set) => ({
   }
 }));
 
-const TaskCard: React.FC<{ task: Task }> = ({ task }) => {
+const TaskCard: React.FC<{ task: Task; isOverlay?: boolean }> = ({ task, isOverlay = false }) => {
   const deleteTask = useKanbanStore((s) => s.deleteTask);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -174,8 +174,8 @@ const TaskCard: React.FC<{ task: Task }> = ({ task }) => {
 
   const style = {
     transform: CSS.Translate.toString(transform),
-    transition,
-    opacity: isDragging ? 0.35 : 1
+    transition: transition || 'transform 200ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease',
+    opacity: isDragging ? 0.25 : 1
   };
 
   const getPriorityIcon = (priority: Priority) => {
@@ -195,7 +195,13 @@ const TaskCard: React.FC<{ task: Task }> = ({ task }) => {
       {...listeners}
       tabIndex={0}
       role="button"
-      className="group relative rounded-lg border border-linear-border bg-linear-card p-3 shadow-sm hover:border-linear-borderHover cursor-grab active:cursor-grabbing transition select-none focus:outline-none focus:ring-1 focus:ring-linear-purple"
+      className={`group relative rounded-lg border bg-linear-card p-3 select-none focus:outline-none transition-all duration-200 ${
+        isOverlay
+          ? 'rotate-2 scale-105 shadow-2xl border-linear-purple ring-2 ring-linear-purple/30 bg-linear-card/95 cursor-grabbing z-50'
+          : isDragging
+          ? 'border-dashed border-linear-purple/40 bg-linear-subtle/30 cursor-grabbing'
+          : 'border-linear-border shadow-xs hover:border-linear-borderHover hover:shadow-md cursor-grab active:cursor-grabbing focus:ring-1 focus:ring-linear-purple'
+      }`}
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 font-mono text-[11px] text-linear-muted">
@@ -232,7 +238,11 @@ const TaskCard: React.FC<{ task: Task }> = ({ task }) => {
   );
 };
 
-const KanbanColumn: React.FC<{ column: Column; tasks: Task[] }> = ({ column, tasks }) => {
+const KanbanColumn: React.FC<{ column: Column; tasks: Task[]; isDraggingActive?: boolean }> = ({
+  column,
+  tasks,
+  isDraggingActive = false
+}) => {
   const addTask = useKanbanStore((s) => s.addTask);
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -263,8 +273,12 @@ const KanbanColumn: React.FC<{ column: Column; tasks: Task[] }> = ({ column, tas
   return (
     <section
       ref={setNodeRef}
-      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl flex flex-col bg-linear-bg/80 border transition ${
-        isOver ? 'border-linear-purple/60 bg-linear-subtle/50' : 'border-linear-border/40'
+      className={`flex-1 min-w-[280px] max-w-[320px] rounded-xl flex flex-col bg-linear-bg/80 border transition-all duration-200 ${
+        isOver
+          ? 'border-linear-purple ring-2 ring-linear-purple/30 bg-linear-purple/5 shadow-lg'
+          : isDraggingActive
+          ? 'border-dashed border-linear-border/80 bg-linear-subtle/20'
+          : 'border-linear-border/40'
       }`}
     >
       <div className="p-3 flex items-center justify-between border-b border-linear-border/40 select-none">
@@ -582,9 +596,12 @@ export const App: React.FC = () => {
               key={column.id}
               column={column}
               tasks={filteredTasks.filter((t) => t.columnId === column.id)}
+              isDraggingActive={Boolean(activeTask)}
             />
           ))}
-          <DragOverlay>{activeTask ? <TaskCard task={activeTask} /> : null}</DragOverlay>
+          <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+            {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
+          </DragOverlay>
         </DndContext>
       </main>
 
