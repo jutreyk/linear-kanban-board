@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X, Filter, Tag, Download, Calendar, CheckSquare, Square } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X, Filter, Tag, Download, Calendar, CheckSquare, Square, Zap, TrendingUp } from 'lucide-react';
 import { create } from 'zustand';
 
 export type Priority = 'urgent' | 'high' | 'medium' | 'low';
@@ -29,6 +29,7 @@ export interface Task {
   title: string;
   columnId: ColumnId;
   priority: Priority;
+  points: number;
   assignee: { name: string; avatar: string };
   labels: string[];
   dueDate?: string;
@@ -47,6 +48,8 @@ const COLUMNS: Column[] = [
   { id: 'done', title: 'Готово' }
 ];
 
+const ESTIMATION_POINTS = [1, 2, 3, 5, 8] as const;
+
 interface KanbanState {
   tasks: Task[];
   searchQuery: string;
@@ -56,7 +59,7 @@ interface KanbanState {
   setSelectedPriority: (p: Priority | 'all') => void;
   setSelectedLabel: (l: string | 'all') => void;
   moveTask: (taskId: string, targetColumn: ColumnId) => void;
-  addTask: (title: string, columnId: ColumnId, priority: Priority, dueDate?: string) => void;
+  addTask: (title: string, columnId: ColumnId, priority: Priority, points: number, dueDate?: string) => void;
   updateTask: (taskId: string, patch: Partial<Task>) => void;
   deleteTask: (taskId: string) => void;
   resetToInitial: () => void;
@@ -69,6 +72,7 @@ const INITIAL_TASKS: Task[] = [
     title: 'Миграция сервиса аутентификации на Zero-Trust шлюз',
     columnId: 'done',
     priority: 'urgent',
+    points: 5,
     assignee: { name: 'Аркадий', avatar: 'АГ' },
     labels: ['Безопасность', 'Бэкенд'],
     dueDate: '2026-11-04',
@@ -83,6 +87,7 @@ const INITIAL_TASKS: Task[] = [
     title: 'Потоковая передача котировок и биржевого стакана через WebSockets',
     columnId: 'in-progress',
     priority: 'high',
+    points: 8,
     assignee: { name: 'Аркадий', avatar: 'АГ' },
     labels: ['Трейдинг', 'Финтех'],
     dueDate: '2026-11-12',
@@ -97,6 +102,7 @@ const INITIAL_TASKS: Task[] = [
     title: 'Оптимизация алгоритма посева турнирных сеток Double-Elimination',
     columnId: 'in-progress',
     priority: 'medium',
+    points: 3,
     assignee: { name: 'Разработка', avatar: 'РЗ' },
     labels: ['Алгоритмы'],
     dueDate: '2026-11-15',
@@ -110,6 +116,7 @@ const INITIAL_TASKS: Task[] = [
     title: 'Оптимизация рендеринга графиков для плавности 120 FPS',
     columnId: 'todo',
     priority: 'high',
+    points: 5,
     assignee: { name: 'Фронтенд', avatar: 'ФР' },
     labels: ['Производительность'],
     dueDate: '2026-11-18',
@@ -124,6 +131,7 @@ const INITIAL_TASKS: Task[] = [
     title: 'Конфигурация многоэтапной сборки Dockerfile с non-root пользователем',
     columnId: 'backlog',
     priority: 'low',
+    points: 2,
     assignee: { name: 'Инфраструктура', avatar: 'ИН' },
     labels: ['Девопс'],
     dueDate: '2026-11-25',
@@ -131,7 +139,7 @@ const INITIAL_TASKS: Task[] = [
   }
 ];
 
-const STORAGE_KEY = 'linear_kanban_tasks_v3';
+const STORAGE_KEY = 'linear_kanban_tasks_v4';
 
 const loadStoredTasks = (): Task[] => {
   try {
@@ -139,6 +147,7 @@ const loadStoredTasks = (): Task[] => {
     if (!raw) {
       localStorage.removeItem('linear_kanban_tasks_v1');
       localStorage.removeItem('linear_kanban_tasks_v2');
+      localStorage.removeItem('linear_kanban_tasks_v3');
       return INITIAL_TASKS;
     }
     const parsed = JSON.parse(raw);
@@ -168,7 +177,7 @@ export const useKanbanStore = create<KanbanState>((set) => ({
       saveTasks(updated);
       return { tasks: updated };
     }),
-  addTask: (title, columnId, priority, dueDate) =>
+  addTask: (title, columnId, priority, points, dueDate) =>
     set((state) => {
       const nextId = state.tasks.length + 210;
       const newTask: Task = {
@@ -177,6 +186,7 @@ export const useKanbanStore = create<KanbanState>((set) => ({
         title,
         columnId,
         priority,
+        points: points || 3,
         assignee: { name: 'Аркадий', avatar: 'АГ' },
         labels: ['Задача'],
         dueDate,
@@ -260,16 +270,22 @@ const TaskCard: React.FC<{ task: Task; isOverlay?: boolean; onSelect?: (task: Ta
           {getPriorityIcon(task.priority)}
           <span>{task.identifier}</span>
         </div>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            deleteTask(task.id);
-          }}
-          className="opacity-0 group-hover:opacity-100 hover:text-red-400 text-slate-500 p-0.5 rounded transition"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-linear-subtle border border-linear-border text-slate-300">
+            <Zap className="w-2.5 h-2.5 text-amber-400" />
+            <span>{task.points || 1}pt</span>
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteTask(task.id);
+            }}
+            className="opacity-0 group-hover:opacity-100 hover:text-red-400 text-slate-500 p-0.5 rounded transition"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
       </div>
 
       <h3 className="text-xs font-medium text-linear-text leading-snug mb-3">{task.title}</h3>
@@ -329,7 +345,12 @@ const KanbanColumn: React.FC<{
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
+  const [points, setPoints] = useState<number>(3);
   const [dueDate, setDueDate] = useState('');
+
+  const columnPoints = React.useMemo(() => {
+    return tasks.reduce((sum, t) => sum + (t.points || 0), 0);
+  }, [tasks]);
 
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -339,7 +360,7 @@ const KanbanColumn: React.FC<{
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-    addTask(newTitle.trim(), column.id, priority, dueDate || undefined);
+    addTask(newTitle.trim(), column.id, priority, points, dueDate || undefined);
     setNewTitle('');
     setDueDate('');
     setIsAdding(false);
@@ -372,6 +393,9 @@ const KanbanColumn: React.FC<{
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-linear-card border border-linear-border text-linear-muted">
             {tasks.length}
           </span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-linear-subtle border border-linear-border/60 text-slate-400">
+            {columnPoints}pt
+          </span>
         </div>
         <button
           type="button"
@@ -394,22 +418,33 @@ const KanbanColumn: React.FC<{
               className="w-full bg-linear-subtle border border-linear-border rounded px-2.5 py-1 text-xs text-white placeholder-slate-500 focus:outline-none"
             />
             <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as Priority)}
-                  className="bg-linear-subtle border border-linear-border text-[11px] text-slate-300 rounded px-1.5 py-0.5"
+                  className="bg-linear-subtle border border-linear-border text-[11px] text-slate-300 rounded px-1 py-0.5"
                 >
                   <option value="urgent">Срочно</option>
                   <option value="high">Высокий</option>
                   <option value="medium">Средний</option>
                   <option value="low">Низкий</option>
                 </select>
+                <select
+                  value={points}
+                  onChange={(e) => setPoints(Number(e.target.value))}
+                  className="bg-linear-subtle border border-linear-border text-[11px] text-amber-300 font-mono rounded px-1 py-0.5"
+                >
+                  {ESTIMATION_POINTS.map((pt) => (
+                    <option key={pt} value={pt}>
+                      {pt}pt
+                    </option>
+                  ))}
+                </select>
                 <input
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="bg-linear-subtle border border-linear-border text-[11px] text-slate-300 rounded px-1.5 py-0.5"
+                  className="bg-linear-subtle border border-linear-border text-[11px] text-slate-300 rounded px-1 py-0.5 max-w-[100px]"
                 />
               </div>
               <div className="flex gap-1.5">
@@ -450,12 +485,14 @@ export const App: React.FC = () => {
   const [quickTitle, setQuickTitle] = useState('');
   const [quickColumn, setQuickColumn] = useState<ColumnId>('todo');
   const [quickPriority, setQuickPriority] = useState<Priority>('medium');
+  const [quickPoints, setQuickPoints] = useState<number>(3);
   const [quickDueDate, setQuickDueDate] = useState('');
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editColumn, setEditColumn] = useState<ColumnId>('todo');
   const [editPriority, setEditPriority] = useState<Priority>('medium');
+  const [editPoints, setEditPoints] = useState<number>(3);
   const [editDueDate, setEditDueDate] = useState('');
   const [newTagInput, setNewTagInput] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
@@ -465,6 +502,7 @@ export const App: React.FC = () => {
     setEditTitle(task.title);
     setEditColumn(task.columnId);
     setEditPriority(task.priority);
+    setEditPoints(task.points || 3);
     setEditDueDate(task.dueDate || '');
     setNewTagInput('');
     setNewSubtaskTitle('');
@@ -481,6 +519,7 @@ export const App: React.FC = () => {
       title: editTitle.trim(),
       columnId: editColumn,
       priority: editPriority,
+      points: editPoints,
       dueDate: editDueDate || undefined
     });
     setSelectedTask((prev) =>
@@ -490,6 +529,7 @@ export const App: React.FC = () => {
             title: editTitle.trim(),
             columnId: editColumn,
             priority: editPriority,
+            points: editPoints,
             dueDate: editDueDate || undefined
           }
         : null
@@ -559,13 +599,14 @@ export const App: React.FC = () => {
   };
 
   const exportToCsv = () => {
-    const headers = ['ID', 'Identifier', 'Title', 'Column', 'Priority', 'Assignee', 'Labels'];
+    const headers = ['ID', 'Identifier', 'Title', 'Column', 'Priority', 'Points', 'Assignee', 'Labels'];
     const rows = tasks.map((t) => [
       `"${t.id}"`,
       `"${t.identifier}"`,
       `"${t.title.replace(/"/g, '""')}"`,
       `"${t.columnId}"`,
       `"${t.priority}"`,
+      `"${t.points || 1}"`,
       `"${t.assignee.name}"`,
       `"${t.labels.join('; ')}"`
     ]);
@@ -601,11 +642,36 @@ export const App: React.FC = () => {
   const handleQuickSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickTitle.trim()) return;
-    addTask(quickTitle.trim(), quickColumn, quickPriority, quickDueDate || undefined);
+    addTask(quickTitle.trim(), quickColumn, quickPriority, quickPoints, quickDueDate || undefined);
     setQuickTitle('');
+    setQuickPoints(3);
     setQuickDueDate('');
     setIsQuickCreateOpen(false);
   };
+
+  const sprintStats = React.useMemo(() => {
+    const totalPoints = tasks.reduce((s, t) => s + (t.points || 0), 0);
+    const doneTasks = tasks.filter((t) => t.columnId === 'done');
+    const donePoints = doneTasks.reduce((s, t) => s + (t.points || 0), 0);
+    const inProgressTasks = tasks.filter((t) => t.columnId === 'in-progress');
+    const inProgressPoints = inProgressTasks.reduce((s, t) => s + (t.points || 0), 0);
+    const todoTasks = tasks.filter((t) => t.columnId === 'todo');
+    const todoPoints = todoTasks.reduce((s, t) => s + (t.points || 0), 0);
+    const backlogTasks = tasks.filter((t) => t.columnId === 'backlog');
+    const backlogPoints = backlogTasks.reduce((s, t) => s + (t.points || 0), 0);
+
+    const percent = totalPoints > 0 ? Math.round((donePoints / totalPoints) * 100) : 0;
+    return {
+      totalPoints,
+      donePoints,
+      inProgressPoints,
+      todoPoints,
+      backlogPoints,
+      percent,
+      totalCount: tasks.length,
+      doneCount: doneTasks.length
+    };
+  }, [tasks]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -703,6 +769,63 @@ export const App: React.FC = () => {
           </div>
         </div>
       </header>
+
+      <section className="px-6 py-2.5 border-b border-linear-border/60 bg-linear-card/60 select-none">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 font-mono text-xs text-white font-medium">
+              <TrendingUp className="w-3.5 h-3.5 text-linear-purple" />
+              <span>Прогресс спринта:</span>
+              <span className="text-linear-purple font-bold">{sprintStats.percent}%</span>
+            </div>
+            <span className="text-[11px] text-linear-muted font-mono">
+              ({sprintStats.donePoints} из {sprintStats.totalPoints} pt выполнено)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-4 text-[11px] font-mono text-linear-muted">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              Готово: <strong className="text-white">{sprintStats.donePoints}pt</strong>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-linear-purple" />
+              В работе: <strong className="text-white">{sprintStats.inProgressPoints}pt</strong>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              К выполнению: <strong className="text-white">{sprintStats.todoPoints}pt</strong>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-slate-500" />
+              Бэклог: <strong className="text-white">{sprintStats.backlogPoints}pt</strong>
+            </span>
+          </div>
+        </div>
+
+        <div className="w-full h-1.5 bg-linear-subtle rounded-full mt-2 overflow-hidden flex">
+          {sprintStats.totalPoints > 0 && (
+            <>
+              <div
+                style={{ width: `${(sprintStats.donePoints / sprintStats.totalPoints) * 100}%` }}
+                className="h-full bg-emerald-400 transition-all duration-300"
+              />
+              <div
+                style={{ width: `${(sprintStats.inProgressPoints / sprintStats.totalPoints) * 100}%` }}
+                className="h-full bg-linear-purple transition-all duration-300"
+              />
+              <div
+                style={{ width: `${(sprintStats.todoPoints / sprintStats.totalPoints) * 100}%` }}
+                className="h-full bg-amber-400 transition-all duration-300"
+              />
+              <div
+                style={{ width: `${(sprintStats.backlogPoints / sprintStats.totalPoints) * 100}%` }}
+                className="h-full bg-slate-600 transition-all duration-300"
+              />
+            </>
+          )}
+        </div>
+      </section>
 
       <section className="px-6 py-2 border-b border-linear-border/60 bg-linear-card/40 flex items-center justify-between text-xs overflow-x-auto select-none">
         <div className="flex items-center gap-3">
@@ -851,11 +974,23 @@ export const App: React.FC = () => {
                     <option value="low">Низкий</option>
                   </select>
 
+                  <select
+                    value={quickPoints}
+                    onChange={(e) => setQuickPoints(Number(e.target.value))}
+                    className="bg-linear-subtle border border-linear-border text-xs text-amber-300 font-mono rounded-md px-2 py-1 focus:outline-none"
+                  >
+                    {ESTIMATION_POINTS.map((pt) => (
+                      <option key={pt} value={pt}>
+                        {pt}pt
+                      </option>
+                    ))}
+                  </select>
+
                   <input
                     type="date"
                     value={quickDueDate}
                     onChange={(e) => setQuickDueDate(e.target.value)}
-                    className="bg-linear-subtle border border-linear-border text-xs text-slate-300 rounded-md px-2 py-1 focus:outline-none"
+                    className="bg-linear-subtle border border-linear-border text-xs text-slate-300 rounded-md px-2 py-1 focus:outline-none max-w-[110px]"
                   />
                 </div>
 
@@ -912,7 +1047,7 @@ export const App: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-linear-muted uppercase tracking-wider mb-1.5">
                     Колонка
@@ -949,6 +1084,27 @@ export const App: React.FC = () => {
                     <option value="high">Высокий</option>
                     <option value="medium">Средний</option>
                     <option value="low">Низкий</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-linear-muted uppercase tracking-wider mb-1.5">
+                    Оценка (pt)
+                  </label>
+                  <select
+                    value={editPoints}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setEditPoints(val);
+                      updateTask(selectedTask.id, { points: val });
+                    }}
+                    className="w-full bg-linear-subtle border border-linear-border text-xs text-amber-300 font-mono rounded-lg px-2.5 py-1.5 focus:outline-none"
+                  >
+                    {ESTIMATION_POINTS.map((pt) => (
+                      <option key={pt} value={pt}>
+                        {pt}pt
+                      </option>
+                    ))}
                   </select>
                 </div>
 
