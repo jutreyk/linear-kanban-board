@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, Minus, Trash2, Plus, Search, Sparkles, X, Filter, Tag } from 'lucide-react';
 import { create } from 'zustand';
 
 export type Priority = 'urgent' | 'high' | 'medium' | 'low';
@@ -42,10 +42,15 @@ const COLUMNS: Column[] = [
 interface KanbanState {
   tasks: Task[];
   searchQuery: string;
+  selectedPriority: Priority | 'all';
+  selectedLabel: string | 'all';
   setSearchQuery: (q: string) => void;
+  setSelectedPriority: (p: Priority | 'all') => void;
+  setSelectedLabel: (l: string | 'all') => void;
   moveTask: (taskId: string, targetColumn: ColumnId) => void;
   addTask: (title: string, columnId: ColumnId, priority: Priority) => void;
   deleteTask: (taskId: string) => void;
+  resetToInitial: () => void;
 }
 
 const INITIAL_TASKS: Task[] = [
@@ -96,12 +101,15 @@ const INITIAL_TASKS: Task[] = [
   }
 ];
 
-const STORAGE_KEY = 'linear_kanban_tasks_v1';
+const STORAGE_KEY = 'linear_kanban_tasks_v2';
 
 const loadStoredTasks = (): Task[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return INITIAL_TASKS;
+    if (!raw) {
+      localStorage.removeItem('linear_kanban_tasks_v1');
+      return INITIAL_TASKS;
+    }
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_TASKS;
   } catch {
@@ -118,7 +126,11 @@ const saveTasks = (tasks: Task[]) => {
 export const useKanbanStore = create<KanbanState>((set) => ({
   tasks: loadStoredTasks(),
   searchQuery: '',
+  selectedPriority: 'all',
+  selectedLabel: 'all',
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setSelectedPriority: (priority) => set({ selectedPriority: priority }),
+  setSelectedLabel: (label) => set({ selectedLabel: label }),
   moveTask: (taskId, targetColumn) =>
     set((state) => {
       const updated = state.tasks.map((t) => (t.id === taskId ? { ...t, columnId: targetColumn } : t));
@@ -146,7 +158,11 @@ export const useKanbanStore = create<KanbanState>((set) => ({
       const updated = state.tasks.filter((t) => t.id !== taskId);
       saveTasks(updated);
       return { tasks: updated };
-    })
+    }),
+  resetToInitial: () => {
+    saveTasks(INITIAL_TASKS);
+    set({ tasks: INITIAL_TASKS });
+  }
 }));
 
 const TaskCard: React.FC<{ task: Task }> = ({ task }) => {
@@ -311,12 +327,28 @@ const KanbanColumn: React.FC<{ column: Column; tasks: Task[] }> = ({ column, tas
 };
 
 export const App: React.FC = () => {
-  const { tasks, moveTask, searchQuery, setSearchQuery, addTask } = useKanbanStore();
+  const {
+    tasks,
+    moveTask,
+    searchQuery,
+    setSearchQuery,
+    selectedPriority,
+    setSelectedPriority,
+    selectedLabel,
+    setSelectedLabel,
+    addTask
+  } = useKanbanStore();
   const [activeTask, setActiveTask] = React.useState<Task | null>(null);
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
   const [quickColumn, setQuickColumn] = useState<ColumnId>('todo');
   const [quickPriority, setQuickPriority] = useState<Priority>('medium');
+
+  const allLabels = React.useMemo(() => {
+    const set = new Set<string>();
+    tasks.forEach((t) => t.labels?.forEach((l) => set.add(l)));
+    return Array.from(set);
+  }, [tasks]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -349,11 +381,14 @@ export const App: React.FC = () => {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  const filteredTasks = tasks.filter(
-    (t) =>
+  const filteredTasks = tasks.filter((t) => {
+    const matchesSearch =
       t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.identifier.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      t.identifier.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesPriority = selectedPriority === 'all' || t.priority === selectedPriority;
+    const matchesLabel = selectedLabel === 'all' || t.labels?.includes(selectedLabel);
+    return matchesSearch && matchesPriority && matchesLabel;
+  });
 
   const handleDragStart = (event: DragStartEvent) => {
     const task = tasks.find((t) => t.id === event.active.id);
@@ -421,6 +456,79 @@ export const App: React.FC = () => {
           </div>
         </div>
       </header>
+
+      <section className="px-6 py-2 border-b border-linear-border/60 bg-linear-card/40 flex items-center justify-between text-xs overflow-x-auto select-none">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-linear-muted font-medium pr-2 border-r border-linear-border/60">
+            <Filter className="w-3.5 h-3.5 text-linear-purple" />
+            <span>Фильтры:</span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {(
+              [
+                { id: 'all', label: 'Все приоритеты' },
+                { id: 'urgent', label: 'Срочные' },
+                { id: 'high', label: 'Высокие' },
+                { id: 'medium', label: 'Средние' },
+                { id: 'low', label: 'Низкие' }
+              ] as const
+            ).map((p) => {
+              const active = selectedPriority === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelectedPriority(p.id)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition ${
+                    active
+                      ? 'bg-linear-purple text-white shadow-xs'
+                      : 'bg-linear-subtle/60 text-slate-400 hover:text-white hover:bg-linear-subtle border border-linear-border/40'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-3.5 w-px bg-linear-border/60 mx-1" />
+
+          <div className="flex items-center gap-1.5">
+            <Tag className="w-3 h-3 text-slate-500" />
+            <select
+              value={selectedLabel}
+              onChange={(e) => setSelectedLabel(e.target.value)}
+              className="bg-linear-subtle border border-linear-border/60 text-[11px] text-slate-300 rounded-md px-2 py-0.5 focus:outline-none focus:border-linear-purple"
+            >
+              <option value="all">Все теги</option>
+              {allLabels.map((lbl) => (
+                <option key={lbl} value={lbl}>
+                  {lbl}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(selectedPriority !== 'all' || selectedLabel !== 'all' || searchQuery) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedPriority('all');
+                setSelectedLabel('all');
+                setSearchQuery('');
+              }}
+              className="text-[11px] text-slate-400 hover:text-red-400 transition ml-2"
+            >
+              Сбросить
+            </button>
+          )}
+        </div>
+
+        <div className="text-[11px] text-linear-muted font-mono">
+          Показано: <span className="text-white font-medium">{filteredTasks.length}</span> из {tasks.length}
+        </div>
+      </section>
 
       <main className="flex-1 p-6 overflow-x-auto flex gap-4">
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
